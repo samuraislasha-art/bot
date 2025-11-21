@@ -1,7 +1,7 @@
-const crypto = require("crypto");
-const querystring = require("querystring");
+import crypto from "crypto";
+import querystring from "querystring";
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   const clientId = process.env.SPOTIFY_CLIENT_ID;
 
   if (!clientId) {
@@ -9,13 +9,13 @@ module.exports = async function handler(req, res) {
   }
 
   // ===============================================================
-  // 1. GENERATE STATE (security against CSRF)
+  // 1. GENERATE STATE VALUE
   // ===============================================================
   const state = crypto.randomBytes(16).toString("hex");
 
-  // Set secure httpOnly cookie for state
+  // Set cookie (must use SameSite=None for OAuth to work)
   res.setHeader("Set-Cookie", [
-    `spotify_auth_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=300`
+    `spotify_auth_state=${state}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=300`
   ]);
 
   // ===============================================================
@@ -43,8 +43,8 @@ module.exports = async function handler(req, res) {
     response_type: "code",
     redirect_uri: redirectUri,
     scope,
-    state // IMPORTANT
+    state
   });
 
   return res.redirect(`https://accounts.spotify.com/authorize?${params}`);
-};
+}
