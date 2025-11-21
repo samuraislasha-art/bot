@@ -2,20 +2,20 @@ import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(req, res) {
   try {
-    // Read ?code=####
-    const code = req.query.code?.toUpperCase();
+    // Accept BOTH query (?code=) and JSON body { code: }
+    const bodyCode = req.body?.code;
+    const queryCode = req.query.code;
+    const code = (bodyCode || queryCode)?.toUpperCase();
 
     if (!code) {
       return res.status(400).json({ error: "Missing code" });
     }
 
-    // Supabase client
     const supabase = createClient(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SECRET_KEY
     );
 
-    // Find token entry
     const { data, error } = await supabase
       .from("spotify_tokens")
       .select("*")
@@ -26,13 +26,11 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: "Invalid code" });
     }
 
-    // Delete token after use
     await supabase
       .from("spotify_tokens")
       .delete()
       .eq("code", code);
 
-    // Return token data ONLY
     return res.json(data.data);
 
   } catch (err) {
