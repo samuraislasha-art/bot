@@ -11,32 +11,39 @@ export default async function handler(req, res) {
     );
 
     const code = req.query.code || null;
-    const state = req.query.state || null; // DISCORD USER ID
+    const state = req.query.state || null; // includes DISCORD ID
     const existing = req.query.c || null;
 
-    const proto = req.headers["x-forwarded-proto"] ?? "https";
-    const host = req.headers.host ?? process.env.PUBLIC_DOMAIN;
+    // ===============================================================
+    // REBUILD REDIRECT URI (required for Vercel)
+    // ===============================================================
+    const proto = req.headers["x-forwarded-proto"] || "https";
+    const host = req.headers.host || process.env.PUBLIC_DOMAIN;
     const redirectUri = `${proto}://${host}/api/callback`;
 
-    // Read state cookie
+    // ===============================================================
+    // READ STATE COOKIE (contains same Discord ID + salt)
+    // ===============================================================
     const cookies = req.headers.cookie || "";
     const match = cookies.match(/spotify_auth_state=([^;]+)/);
     const storedState = match ? match[1] : null;
 
-    // --------------------------------------------
-    // STATE CHECK (security)
-    // --------------------------------------------
+    // ===============================================================
+    // ❌ INVALID — NO STATE / MISMATCH
+    // ===============================================================
     if (code && (!state || state !== storedState)) {
       return res.send(`
-      <html><body style="font-family:sans-serif;text-align:center;margin-top:60px">
-        <h1>❌ State Mismatch</h1>
-        <p>Your Spotify login attempt was rejected.</p>
-      </body></html>`);
+        <html><body style="background:black;color:white;text-align:center;margin-top:120px;font-family:sans-serif">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg" width="90"/>
+          <h1 style="margin-top:30px;">❌ State Mismatch</h1>
+          <p>Your login attempt was rejected for security reasons.</p>
+        </body></html>
+      `);
     }
 
-    // --------------------------------------------
-    // SAFE PAGE REFRESH MODE (?c=XXXXXX)
-    // --------------------------------------------
+    // ===============================================================
+    // SAFE REFRESH MODE (?c=XXXXXX)
+    // ===============================================================
     if (existing) {
       const { data } = await supabase
         .from("spotify_tokens")
@@ -46,36 +53,53 @@ export default async function handler(req, res) {
 
       if (!data) {
         return res.send(`
-        <html><body style="font-family:sans-serif;text-align:center;margin-top:100px;color:white;background:#000">
-          <img src="https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg" width="80" />
-          <h1 style="margin-top:30px;">❌ Code Expired</h1>
-          <p>Your code is no longer valid.</p>
-        </body></html>`);
+          <html><body style="background:black;color:white;text-align:center;margin-top:120px;font-family:sans-serif">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg" width="90"/>
+            <h1 style="margin-top:30px;">❌ Code Expired</h1>
+            <p>This login code no longer exists.</p>
+          </body></html>
+        `);
       }
 
       return res.send(`
-      <html><body style="font-family:sans-serif;text-align:center;margin-top:100px;color:white;background:#000">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg" width="80" />
-        <h1 style="margin-top:30px;">Your Spotify Login Code</h1>
-        <h2 style="font-size:48px;letter-spacing:8px;">${existing}</h2>
-        <p>This code will expire soon. Do not share it.</p>
-      </body></html>`);
+        <html><body style="background:black;color:white;text-align:center;margin-top:120px;font-family:sans-serif">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg" width="90"/>
+          <h1 style="margin-top:30px;">Your Spotify Login Code</h1>
+          <h2 style="font-size:48px;letter-spacing:8px;margin:20px 0;">${existing}</h2>
+          <p>Enter this in Discord to complete login.</p>
+          <p style="opacity:0.7;">Do not share this code.</p>
+        </body></html>
+      `);
     }
 
-    // --------------------------------------------
-    // NO SPOTIFY CODE?
-    // --------------------------------------------
+    // ===============================================================
+    // INVALID — no Spotify code
+    // ===============================================================
     if (!code) {
       return res.send(`
-      <html><body style="font-family:sans-serif;text-align:center;margin-top:60px">
-        <h1>Invalid Access</h1>
-        <p>You must login from Discord.</p>
-      </body></html>`);
+        <html><body style="background:black;color:white;text-align:center;margin-top:120px;font-family:sans-serif">
+          <h1>Invalid Access</h1>
+          <p>You must start login from Discord.</p>
+        </body></html>
+      `);
     }
 
-    // --------------------------------------------
-    // SPOTIFY TOKEN EXCHANGE
-    // --------------------------------------------
+    // ===============================================================
+    // PARSE DISCORD ID OUT OF STATE
+    // ===============================================================
+    const discordId = state.split("_")[0];
+    if (!discordId) {
+      return res.send(`
+        <html><body style="background:black;color:white;text-align:center;margin-top:120px;font-family:sans-serif">
+          <h1>Missing Discord User</h1>
+          <p>Your login attempt was missing a Discord account link.</p>
+        </body></html>
+      `);
+    }
+
+    // ===============================================================
+    // EXCHANGE SPOTIFY CODE FOR TOKENS
+    // ===============================================================
     const formData = querystring.stringify({
       grant_type: "authorization_code",
       code,
@@ -101,41 +125,45 @@ export default async function handler(req, res) {
 
     const tokenData = tokenResponse.data;
 
-    // --------------------------------------------
-    // GENERATE 6-DIGIT SHORT CODE
-    // --------------------------------------------
+    // ===============================================================
+    // GENERATE 6-digit LOGIN CODE
+    // ===============================================================
     const shortCode = Array.from({ length: 6 }, () =>
       "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"[Math.floor(Math.random() * 36)]
     ).join("");
 
-    // --------------------------------------------
+    // ===============================================================
     // DELETE OLD LOGIN FOR THIS DISCORD USER
-    // --------------------------------------------
+    // (ONLY 1 Spotify link per user)
+    // ===============================================================
     await supabase
       .from("spotify_tokens")
       .delete()
-      .eq("discord_id", state);
+      .eq("discord_id", discordId);
 
-    // --------------------------------------------
-    // INSERT NEW LOGIN
-    // --------------------------------------------
+    // ===============================================================
+    // INSERT NEW TOKEN ROW
+    // ===============================================================
     await supabase.from("spotify_tokens").insert({
       code: shortCode,
       data: tokenData,
-      discord_id: state
+      discord_id: discordId
     });
 
-    // --------------------------------------------
-    // REDIRECT TO SELF WITH ?c=XXXXXX
-    // --------------------------------------------
+    // ===============================================================
+    // REDIRECT BACK TO SELF TO SHOW PRETTY PAGE
+    // ===============================================================
     return res.redirect(`/api/callback?c=${shortCode}`);
 
-  } catch (err) {
-    console.error("Callback Error:", err?.response?.data || err);
+  } catch (error) {
+    console.error("Callback Error:", error?.response?.data || error);
+
     return res.status(500).send(`
-    <html><body style="font-family:sans-serif;text-align:center;margin-top:60px">
-      <h1>Server Error</h1>
-      <p>Something went wrong during Spotify authentication.</p>
-    </body></html>`);
+      <html><body style="background:black;color:white;text-align:center;margin-top:100px;font-family:sans-serif">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/1/19/Spotify_logo_without_text.svg" width="90" />
+        <h1 style="margin-top:30px;">Internal Error</h1>
+        <p>Something went wrong during the callback.</p>
+      </body></html>
+    `);
   }
 }
