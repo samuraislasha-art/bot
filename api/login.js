@@ -3,7 +3,7 @@ import querystring from "querystring";
 
 export default async function handler(req, res) {
   const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const discordId = req.query.uid; // The user ID passed from the bot
+  const discordId = req.query.uid; // USER ID passed from the bot
 
   if (!discordId) {
     return res.status(400).send("Missing Discord user ID.");
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   }
 
   // ===========================================================
-  // 1. SET STATE = DISCORD USER ID
+  // 1. SET STATE = DISCORD USER ID (stored securely in cookie)
   // ===========================================================
   res.setHeader("Set-Cookie", [
     `spotify_auth_state=${discordId}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=300`
@@ -23,7 +23,8 @@ export default async function handler(req, res) {
   // ===========================================================
   // 2. REDIRECT URI
   // ===========================================================
-  const redirectUri = `${req.headers["x-forwarded-proto"] || "https"}://${req.headers.host}/api/callback`;
+  const redirectUri =
+    `${req.headers["x-forwarded-proto"] || "https"}://${req.headers.host}/api/callback`;
 
   // ===========================================================
   // 3. SCOPES
@@ -39,16 +40,18 @@ export default async function handler(req, res) {
     "user-top-read"
   ].join(" ");
 
+  // ===========================================================
+  // 4. CREATE AUTH URL
+  // ===========================================================
   const params = querystring.stringify({
     client_id: clientId,
     response_type: "code",
     redirect_uri: redirectUri,
     scope,
-    state: discordId // <-- Spotify will return this back in /callback
+    state: discordId // returned in callback
   });
 
-  // ===========================================================
-  // 4. REDIRECT TO SPOTIFY
-  // ===========================================================
-  return res.redirect(`https://accounts.spotify.com/authorize?${params}`);
+  return res.redirect(
+    `https://accounts.spotify.com/authorize?${params}`
+  );
 }
