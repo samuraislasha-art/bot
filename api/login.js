@@ -2,24 +2,15 @@ import crypto from "crypto";
 import querystring from "querystring";
 
 export default async function handler(req, res) {
+  const discordId = req.query.d;
   const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const discordId = req.query.uid; // USER ID passed from bot
 
-  if (!discordId) {
-    return res.status(400).send("Missing Discord user ID.");
-  }
+  if (!discordId) return res.status(400).send("Missing Discord user ID.");
+  if (!clientId) return res.status(500).send("Missing SPOTIFY_CLIENT_ID");
 
-  if (!clientId) {
-    return res.status(500).send("Missing SPOTIFY_CLIENT_ID");
-  }
+  const state = discordId;
 
-  // Set cookie (spotify_auth_state = Discord ID)
-  res.setHeader("Set-Cookie", [
-    `spotify_auth_state=${discordId}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=300`
-  ]);
-
-  const redirectUri =
-    `${req.headers["x-forwarded-proto"] || "https"}://${req.headers.host}/api/callback`;
+  const redirectUri = `${req.headers["x-forwarded-proto"] || "https"}://${req.headers.host}/api/callback`;
 
   const scope = [
     "user-read-playback-state",
@@ -37,10 +28,8 @@ export default async function handler(req, res) {
     response_type: "code",
     redirect_uri: redirectUri,
     scope,
-    state: discordId
+    state
   });
 
-  return res.redirect(
-    `https://accounts.spotify.com/authorize?${params}`
-  );
+  return res.redirect(`https://accounts.spotify.com/authorize?${params}`);
 }
