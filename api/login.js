@@ -3,7 +3,7 @@ import querystring from "querystring";
 
 export default async function handler(req, res) {
   const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const discordId = req.query.uid; // USER ID passed from the bot
+  const discordId = req.query.uid; // USER ID passed from bot
 
   if (!discordId) {
     return res.status(400).send("Missing Discord user ID.");
@@ -13,22 +13,14 @@ export default async function handler(req, res) {
     return res.status(500).send("Missing SPOTIFY_CLIENT_ID");
   }
 
-  // ===========================================================
-  // 1. SET STATE = DISCORD USER ID (stored securely in cookie)
-  // ===========================================================
+  // Set cookie (spotify_auth_state = Discord ID)
   res.setHeader("Set-Cookie", [
     `spotify_auth_state=${discordId}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=300`
   ]);
 
-  // ===========================================================
-  // 2. REDIRECT URI
-  // ===========================================================
   const redirectUri =
     `${req.headers["x-forwarded-proto"] || "https"}://${req.headers.host}/api/callback`;
 
-  // ===========================================================
-  // 3. SCOPES
-  // ===========================================================
   const scope = [
     "user-read-playback-state",
     "user-modify-playback-state",
@@ -40,15 +32,12 @@ export default async function handler(req, res) {
     "user-top-read"
   ].join(" ");
 
-  // ===========================================================
-  // 4. CREATE AUTH URL
-  // ===========================================================
   const params = querystring.stringify({
     client_id: clientId,
     response_type: "code",
     redirect_uri: redirectUri,
     scope,
-    state: discordId // returned in callback
+    state: discordId
   });
 
   return res.redirect(

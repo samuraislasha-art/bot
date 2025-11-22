@@ -1,4 +1,4 @@
-import { supabase } from "../utils/supabaseClient";  // <-- FIXED PATH
+import { supabase } from "../utils/supabaseClient.js";
 
 export default async function handler(req, res) {
   const discordId =
@@ -6,9 +6,7 @@ export default async function handler(req, res) {
     req.query?.discord_id;
 
   if (!discordId) {
-    return res
-      .status(400)
-      .json({ error: "Missing discord_id" });
+    return res.status(400).json({ error: "Missing discord_id" });
   }
 
   const { data, error } = await supabase
@@ -18,9 +16,7 @@ export default async function handler(req, res) {
     .maybeSingle();
 
   if (error || !data) {
-    return res
-      .status(404)
-      .json({ error: "No Spotify account linked." });
+    return res.status(404).json({ error: "No Spotify account linked." });
   }
 
   return res.json(data.data);
