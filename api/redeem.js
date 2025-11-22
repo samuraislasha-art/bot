@@ -1,4 +1,4 @@
-import { supabase } from "../../utils/supabaseClient";
+import { supabase } from "../utils/supabaseClient";  // <-- FIXED PATH
 
 export default async function handler(req, res) {
   const discordId =
@@ -11,9 +11,6 @@ export default async function handler(req, res) {
       .json({ error: "Missing discord_id" });
   }
 
-  // ======================================================
-  // PULL TOKENS FOR THIS DISCORD USER
-  // ======================================================
   const { data, error } = await supabase
     .from("spotify_tokens")
     .select("*")
@@ -26,8 +23,5 @@ export default async function handler(req, res) {
       .json({ error: "No Spotify account linked." });
   }
 
-  // ======================================================
-  // Return token bundle (your bot handles refresh)
-  // ======================================================
   return res.json(data.data);
 }
